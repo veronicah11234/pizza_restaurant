@@ -1,14 +1,14 @@
-from flask import jsonify, request
-from app import app
-from models import db, Restaurant, Pizza, RestaurantPizza
+from flask import jsonify, request, Blueprint
+from sqlalchemy.exc import IntegrityError
+from models import db, Restaurant, Pizza, RestaurantPizza  # Import db and models from models.py
 
-# Define routes here
+main_bp = Blueprint('main', __name__)
 
-@app.route('/')
+@main_bp.route('/restaurant')
 def index():
     return jsonify({"message": "Welcome to Pizza Restaurant API"})
 
-@app.route('/restaurants/<int:id>', methods=['GET'])
+@main_bp.route('/restaurants/<int:id>', methods=['GET'])
 def get_restaurant(id):
     restaurant = Restaurant.query.get_or_404(id)
     pizzas = [{
@@ -23,14 +23,14 @@ def get_restaurant(id):
         "pizzas": pizzas
     })
 
-@app.route('/restaurants/<int:id>', methods=['DELETE'])
+@main_bp.route('/restaurants/<int:id>', methods=['DELETE'])
 def delete_restaurant(id):
     restaurant = Restaurant.query.get_or_404(id)
     db.session.delete(restaurant)
-    db.session.commit()
+    db.session.commit()  
     return '', 204
 
-@app.route('/pizzas', methods=['GET'])
+@main_bp.route('/pizzas', methods=['GET'])
 def get_pizzas():
     pizzas = Pizza.query.all()
     return jsonify([{
@@ -39,7 +39,23 @@ def get_pizzas():
         "ingredients": pizza.ingredients
     } for pizza in pizzas])
 
-@app.route('/restaurant_pizzas', methods=['POST'])
+@main_bp.route('/pizzas', methods=['POST'])
+def create_pizza():
+    data = request.json
+
+    name = data.get('name')
+    ingredients = data.get('ingredients')
+    new_pizza = Pizza(name=name, ingredients=ingredients)
+
+    try:
+        db.session.add(new_pizza)
+        db.session.commit()
+        return jsonify({'message': 'Pizza created successfully'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@main_bp.route('/restaurant_pizzas', methods=['POST'])
 def create_restaurant_pizza():
     data = request.json
     price = data.get('price')
@@ -56,7 +72,7 @@ def create_restaurant_pizza():
     db.session.add(restaurant_pizza)
 
     try:
-        db.session.commit()
+        db.session.commit()  # Committing the changes to the database session
         pizza = Pizza.query.get(pizza_id)
         return jsonify({
             "id": pizza.id,
@@ -64,10 +80,9 @@ def create_restaurant_pizza():
             "ingredients": pizza.ingredients
         }), 201
     except IntegrityError:
-        db.session.rollback()
+        db.session.rollback()  # Rollback the session if there's an integrity error
         return jsonify({"errors": ["Restaurant or Pizza not found"]}), 404
 
-
-@app.route('/favicon.ico')
+@main_bp.route('/favicon.ico')
 def favicon():
     return "", 404

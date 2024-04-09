@@ -1,32 +1,21 @@
-# app.py
-
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_migrate import MigrateCommand
-from flask.cli import FlaskGroup
 
-
+# Initialize db outside of the create_app function
 db = SQLAlchemy()
 migrate = Migrate()
 
 def create_app():
     app = Flask(__name__)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pizza_restaurants.db'
+
+    # Initialize db with app
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # Import blueprints and register them here
-    from .route import main_bp
+    # Import and register blueprints here to avoid circular imports
+    from route import main_bp  # Moved the import inside the function
     app.register_blueprint(main_bp)
 
     return app
-
-app = create_app()
-
-
-cli = FlaskGroup(app)
-cli.add_command('db', MigrateCommand)
-
-if __name__ == '__main__':
-    cli()
