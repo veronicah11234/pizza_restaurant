@@ -1,4 +1,5 @@
-from flask import jsonify, request, Blueprint
+from flask import jsonify, request, Blueprint, Response
+import json
 from sqlalchemy.exc import IntegrityError
 from models import db, Restaurant, Pizza, RestaurantPizza  # Import db and models from models.py
 
@@ -8,20 +9,56 @@ main_bp = Blueprint('main', __name__)
 def index():
     return jsonify({"message": "Welcome to Pizza Restaurant API"})
 
+
+@main_bp.route('/restaurants', methods=['GET'])
+def get_restaurants():
+    restaurants = Restaurant.query.all()
+    
+    # Construct a list of dictionaries containing restaurant data
+    restaurants_data = []
+    for restaurant in restaurants:
+        restaurant_data = {
+            "id": restaurant.id,
+            "name": restaurant.name,
+            "address": restaurant.address
+        }
+        restaurants_data.append(restaurant_data)
+    
+    # Convert the list of dictionaries to JSON format
+    json_data = json.dumps(restaurants_data, indent=2)
+    
+    # Return the JSON response with the appropriate content type
+    return Response(json_data, mimetype='application/json')
+
+
 @main_bp.route('/restaurants/<int:id>', methods=['GET'])
-def get_restaurant(id):
+def get_restaurant_by_id(id):
     restaurant = Restaurant.query.get_or_404(id)
-    pizzas = [{
-        "id": pizza.id,
-        "name": pizza.name,
-        "ingredients": pizza.ingredients
-    } for pizza in restaurant.pizzas]
-    return jsonify({
+
+    # Construct a list of dictionaries containing pizza data for the restaurant
+    pizzas_data = []
+    for pizza in restaurant.pizzas:
+        pizza_data = {
+            "id": pizza.id,
+            "name": pizza.name,
+            "ingredients": pizza.ingredients
+        }
+        pizzas_data.append(pizza_data)
+
+    # Construct the restaurant data dictionary including the list of pizzas
+    restaurant_data = {
         "id": restaurant.id,
         "name": restaurant.name,
         "address": restaurant.address,
-        "pizzas": pizzas
-    })
+        "pizzas": pizzas_data
+    }
+
+    # Convert the dictionary to JSON format
+    json_data = json.dumps(restaurant_data, indent=2)
+
+    # Return the JSON response with the appropriate content type
+    return Response(json_data, mimetype='application/json')
+
 
 @main_bp.route('/restaurants/<int:id>', methods=['DELETE'])
 def delete_restaurant(id):
@@ -30,14 +67,40 @@ def delete_restaurant(id):
     db.session.commit()  
     return '', 204
 
+@main_bp.route('/restaurant_pizzas/<int:restaurant_id>/<int:pizza_id>', methods=['DELETE'])
+def delete_restaurant_pizza(restaurant_id, pizza_id):
+    # Find the RestaurantPizza record based on the restaurant_id and pizza_id
+    restaurant_pizza = RestaurantPizza.query.filter_by(restaurant_id=restaurant_id, pizza_id=pizza_id).first()
+
+    if restaurant_pizza:
+        db.session.delete(restaurant_pizza)
+        db.session.commit()
+        return '', 204
+    else:
+        return jsonify({"error": "Restaurant pizza not found"}), 404
+
+
 @main_bp.route('/pizzas', methods=['GET'])
 def get_pizzas():
     pizzas = Pizza.query.all()
-    return jsonify([{
-        "id": pizza.id,
-        "name": pizza.name,
-        "ingredients": pizza.ingredients
-    } for pizza in pizzas])
+
+    # Custom JSON formatting
+    pizzas_data = [
+        '{\n'
+        '  "id": ' + str(pizza.id) + ',\n'
+        '  "name": "' + pizza.name + '",\n'
+        '  "ingredients": "' + pizza.ingredients + '"\n'
+        '}' for pizza in pizzas
+    ]
+    
+    # Join the list of pizza objects with commas and newlines
+    response = ",\n".join(pizzas_data)
+    
+    # Add square brackets to encapsulate the list
+    response = "[\n" + response + "\n]"
+
+    # Return the response with the correct content type
+    return response, 200, {'Content-Type': 'application/json'}
 
 @main_bp.route('/pizzas', methods=['POST'])
 def create_pizza():
@@ -58,9 +121,9 @@ def create_pizza():
 @main_bp.route('/restaurant_pizzas', methods=['POST'])
 def create_restaurant_pizza():
     data = request.json
-    price = data.get('price')
-    pizza_id = data.get('pizza_id')
-    restaurant_id = data.get('restaurant_id')
+    price = int(data.get('price'))
+    pizza_id = int(data.get('pizza_id'))
+    restaurant_id = int(data.get('restaurant_id'))
     
     if not all([price, pizza_id, restaurant_id]):
         return jsonify({"errors": ["All fields are required"]}), 400
